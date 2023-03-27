@@ -22,7 +22,7 @@ public class App {
                 .getInstance(DefaultDockerClientConfig.createDefaultConfigBuilder().build()).build();
 
         // create a new container from the hello-world image
-        CreateContainerResponse container = dockerClient.createContainerCmd("hello-world")
+        CreateContainerResponse container = dockerClient.createContainerCmd("fersuy/contackgen-ubuntu:22.04")
                 .withName("hello-world-container")
                 .exec();
 
