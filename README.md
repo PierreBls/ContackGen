@@ -1,30 +1,19 @@
 # ContackGen
-Contexctual Attack Data Generator for Weka
 
-## TODO
+ContackGen is a contexctual cyber-attack data generator for Weka.
 
-1. Pull the docker image from DockerHub
+## Table of contents
 
-```bash
-docker pull fersuy/contackgen/ubuntu:22.04
-```
+- [ContackGen](#contackgen)
+  - [Table of contents](#table-of-contents)
+  - [Backend](#backend)
 
-2. Start the conateiner (60s scan start)
+## Backend
 
-```bash
-docker run --rm --name contackgen-ubuntu  fersuy/contackgen/ubuntu:22.04
-```
+ContackGen use a **Docker** backend to emulate the victim computer/server.
 
-3. Get the IP addres 
-   
-```bash
-sudo docker inspect -f '{{range.NetworkSettings.Networks}}{{.IPAddress}}{{end}}' contackgen-ubuntu
-```
+Available backend:
 
-4. Start Ddos attack
-5. After 60s, pcap file is written. We can copy it:
-
-```bash
-docker cp contackgen-ubuntu:/data/capture.pcap ./capture.pcap
-```
-6. Cast `pcap` file and send it to weka.
+| Image name | Distribution | Active servicies |
+| --- | --- | --- |
+| `fersuy/contackgen-ubuntu2204:1.0.0` | Ubuntu 22.04 | None |
