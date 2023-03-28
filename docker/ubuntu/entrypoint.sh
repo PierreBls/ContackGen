@@ -4,7 +4,7 @@
 mkdir -p /data
 
 # Run Wireshark for 60 seconds and save the output to a file in the mounted volume
-tshark -i eth0 -a duration:60 -w /data/capture.pcap
+tshark -i eth0 -a duration:20 -w /data/capture.pcap
 
 # Make the output file readable by all users
 chmod a+r /data/capture.pcap

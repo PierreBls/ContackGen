@@ -1,6 +1,6 @@
 # Ubuntu 2204 Docker image made to be used with ConTackGen
-# Docker build command: docker build -t fersuy/contackgen-ubuntu:22.04 .
-# Docker run command: docker run --rm --name contackgen-ubuntu  fersuy/contackgen-ubuntu:22.04
+# Docker build command: docker build -t fersuy/contackgen-ubuntu2204:1.0.0
+# Docker run command: docker run --rm --name contackgen-ubuntu  fersuy/contackgen-ubuntu2204:1.0.0
 FROM ubuntu:22.04
 
 # Install dependencies (tshark)
