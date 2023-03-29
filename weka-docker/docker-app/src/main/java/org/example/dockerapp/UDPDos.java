@@ -38,7 +38,7 @@ public class UDPDos extends Thread {
 
         // port random 0-65535
         int port = (int) (Math.random() * 65535);
-        
+
         DatagramPacket dataSent = new DatagramPacket(buffer, length, serveur, port);
         DatagramSocket socket = new DatagramSocket();
         socket.send(dataSent);

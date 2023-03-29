@@ -19,6 +19,18 @@ Available backend:
 | --- | --- | --- |
 | `fersuy/contackgen-ubuntu2204:1.0.0` | Ubuntu 22.04 | None |
 
+## Compile Weka
+
+```
+mvn clean package -Dmaven.test.skip=true -Dmaven.javadoc.skip=true
+```
+
+## Run GUI
+
+```
+Run le main de la classe weka.gui.GUIChooser
+```
+
 ## Authors
 
 - Mathieu SALLIOT

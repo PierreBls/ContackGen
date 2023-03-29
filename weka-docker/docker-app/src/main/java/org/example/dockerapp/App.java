@@ -5,7 +5,6 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.concurrent.TimeoutException;
-import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import org.apache.commons.compress.archivers.tar.TarArchiveEntry;
@@ -134,26 +133,26 @@ public class App {
         handle.close();
     }
 
-    private static void parsePacket(String packet) {
-        Matcher destAddrMatcher = DEST_ADDR_PATTERN.matcher(packet);
-        if (destAddrMatcher.find()) {
-            System.out.println("Destination address: " + destAddrMatcher.group(1));
-        }
+    // private static void parsePacket(String packet) {
+    // Matcher destAddrMatcher = DEST_ADDR_PATTERN.matcher(packet);
+    // if (destAddrMatcher.find()) {
+    // System.out.println("Destination address: " + destAddrMatcher.group(1));
+    // }
 
-        Matcher srcAddrMatcher = SRC_ADDR_PATTERN.matcher(packet);
-        if (srcAddrMatcher.find()) {
-            System.out.println("Source address: " + srcAddrMatcher.group(1));
-        }
+    // Matcher srcAddrMatcher = SRC_ADDR_PATTERN.matcher(packet);
+    // if (srcAddrMatcher.find()) {
+    // System.out.println("Source address: " + srcAddrMatcher.group(1));
+    // }
 
-        Matcher srcPortMatcher = SRC_PORT_PATTERN.matcher(packet);
-        if (srcPortMatcher.find()) {
-            System.out.println("Source port: " + srcPortMatcher.group(1));
-        }
+    // Matcher srcPortMatcher = SRC_PORT_PATTERN.matcher(packet);
+    // if (srcPortMatcher.find()) {
+    // System.out.println("Source port: " + srcPortMatcher.group(1));
+    // }
 
-        Matcher destPortMatcher = DEST_PORT_PATTERN.matcher(packet);
-        if (destPortMatcher.find()) {
-            System.out.println("Destination port: " + destPortMatcher.group(1));
-        }
-    }
+    // Matcher destPortMatcher = DEST_PORT_PATTERN.matcher(packet);
+    // if (destPortMatcher.find()) {
+    // System.out.println("Destination port: " + destPortMatcher.group(1));
+    // }
+    // }
 
 }
