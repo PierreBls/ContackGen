@@ -9,7 +9,7 @@ ContackGen is a contexctual cyber-attack data generator for Weka.
   - [Backend](#backend)
   - [Compile Weka](#compile-weka)
   - [Run GUI](#run-gui)
-  - [Whats next](#whats-next)
+  - [What's next](#whats-next)
   - [Authors](#authors)
 
 ## Backend
@@ -20,7 +20,7 @@ Available backend:
 
 | Image name | Distribution | Active servicies |
 | --- | --- | --- |
-| `fersuy/contackgen-ubuntu2204:1.0.0` | Ubuntu 22.04 | None |
+| `fersuy/contackgen-ubuntu2204:1.1.0` | Ubuntu 22.04 | nginx |
 
 ## Compile Weka
 
@@ -34,12 +34,16 @@ mvn clean package -Dmaven.test.skip=true -Dmaven.javadoc.skip=true
 Run le main de la classe weka.gui.GUIChooser
 ```
 
-## Whats next
+## What's next
 
-- [ ] Flag attack packets
-- [ ] Make simulation time configurable (simulation time = 180s) (pierre)
+- [ ] Flag attack packets (Need to use an IDS to log traffic and detect attack packets)
+- [ ] Make simulation time configurable (simulation time = 180s)
+  - [X] Run conteiner with a web server nging as process and a payload embedded in the container
+  - [X] Set generator variables (duration, pcap full path, docker image)
+  - [ ] Execute the payload inside the container with duration and pcap full path as args (remote exec command in container)
+  - [ ] Cleaning code (add comments, add error handling, ...)
 - [ ] Make our extension to be a plugin
-- [ ] 
+- [ ] Design a new backend architecture, maybe with many containers that permit to have one container that capture traffic from the victim and another container that emulate the victim. That will permit to have a more realistic simulation with any type of docker images for the victim.
 
 ## Authors
 
