@@ -7,6 +7,9 @@ ContackGen is a contexctual cyber-attack data generator for Weka.
 - [ContackGen](#contackgen)
   - [Table of contents](#table-of-contents)
   - [Backend](#backend)
+  - [Compile Weka](#compile-weka)
+  - [Run GUI](#run-gui)
+  - [Whats next](#whats-next)
   - [Authors](#authors)
 
 ## Backend
@@ -30,6 +33,13 @@ mvn clean package -Dmaven.test.skip=true -Dmaven.javadoc.skip=true
 ```
 Run le main de la classe weka.gui.GUIChooser
 ```
+
+## Whats next
+
+- [ ] Flag attack packets
+- [ ] Make simulation time configurable (simulation time = 180s) (pierre)
+- [ ] Make our extension to be a plugin
+- [ ] 
 
 ## Authors
 
