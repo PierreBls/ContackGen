@@ -20,8 +20,8 @@ while [[ $# -gt 0 ]]; do
         -h|--help)
             echo "Usage: $0 [options]"
             echo "Options:"
-            echo "  -d, --duration <duration>  Duration of the capture"
-            echo "  -o, --output <output>      Output file"
+            echo "  -d, --duration <duration>  Duration of the capture (default: 180 seconds)"
+            echo "  -o, --output <output>      Output file (default: /data/capture.pcap))"
             echo "  -h, --help                 Show this help message"
             exit 0
             ;;
