@@ -65,15 +65,10 @@ import weka.datagenerators.ClassificationGenerator;
 public class Pcap extends ClassificationGenerator {
 
     // Dataset attributes
-    private static final String[] STRING_DATASET_ATTRIBUTES = {
-            "srcIp", "dstIp", "protocol"
-    };
-    private static final String[] INT_DATASET_ATTRIBUTES = {
-            "srcPort", "dstPort", "type", "version", "IHL", "length", "identification", "fragmentOffset", "TTL",
+    private static final String[] DATASET_ATTRIBUTES = {
+            "srcIp", "dstIp", "protocol", "srcPort", "dstPort", "type", "version", "IHL", "length", "identification", "fragmentOffset", "TTL",
             "headerChecksum", "timeStamp"
     };
-    private static final String[] DATASET_ATTRIBUTES = ArrayUtils.addAll(STRING_DATASET_ATTRIBUTES,
-            INT_DATASET_ATTRIBUTES);
     
     // Dataset attributes
     private static Map<String, Attribute> datasetAttributes = new HashMap<String, Attribute>();
@@ -92,7 +87,7 @@ public class Pcap extends ClassificationGenerator {
     private static String[] TTLs;
     private static String[] protocols;
     private static String[] headerChecksums;
-    private static int[] timestamps;
+    private static String[] timestamps;
 
     // Regex patterns
     private static final Pattern DEST_ADDR_PATTERN = Pattern.compile("Destination address: /([\\d.]+)");
@@ -434,7 +429,6 @@ public class Pcap extends ClassificationGenerator {
      */
     @Override
     public Instances generateExamples() throws Exception {
-        // DEBUG LOG
         System.out.println("Generating dataset...");
 
         // Check if the dataset format is defined
@@ -445,10 +439,7 @@ public class Pcap extends ClassificationGenerator {
         // Start the docker container
         runDocker(getDockerImage(), getDuration(), getPcapFullPath());
 
-        // DEBUG LOG
-        System.out.println("Loop on the packets...");
         Instances result = new Instances(m_DatasetFormat, 0);
-        // double[] atts;
         for (int i = 0; i < getMaxPackets(); i++) {
             // Equivalent to the generateExample method
 
@@ -531,6 +522,9 @@ public class Pcap extends ClassificationGenerator {
             case "headerChecksum":
                 attsValue = headerChecksums[i];
                 break;
+            case "timeStamp":
+                attsValue = timestamps[i];
+                break;
         }
         return attsValue;
     }
@@ -611,7 +605,7 @@ public class Pcap extends ClassificationGenerator {
                     parsePacket(packetString);
                     // get packet timestamp format since the beginning of the capture
                     long timeDiffInMillis = handle.getTimestamp().getTime() - startTime.getTime();
-                    timestamps = ArrayUtils.add(timestamps, (int) timeDiffInMillis);
+                    timestamps = ArrayUtils.add(timestamps, String.valueOf(timeDiffInMillis));
                 }
 
             } catch (TimeoutException e) {
@@ -743,6 +737,8 @@ public class Pcap extends ClassificationGenerator {
         // Start container
         System.out.println("Start Docker container");
         dockerClient.startContainerCmd(containerName).exec();
+        startTime = new Timestamp(System.currentTimeMillis());
+
 
         // Sleep 2 seconds
         Thread.sleep(2000);
@@ -768,7 +764,6 @@ public class Pcap extends ClassificationGenerator {
         System.out.println("Start UDP DOS");
         UDPDos udp = new UDPDos(ipAddress);
         udp.start();
-        startTime = new Timestamp(System.currentTimeMillis());
 
         // Sleep 20 seconds
         Thread.sleep(duration * 1000);
