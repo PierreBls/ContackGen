@@ -7,6 +7,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Enumeration;
@@ -43,11 +44,12 @@ import weka.core.Utils;
 import weka.datagenerators.ClassificationGenerator;
 
 /**
- * Generates a contexctual dataset of network traffic. The dataset is generated 
- * from a simulation of a network traffic. The simulation is done using a docker.
+ * Generates a contexctual dataset of network traffic. The dataset is generated
+ * from a simulation of a network traffic. The simulation is done using a
+ * docker.
  * The docker container capture the network traffic and save into a pcap file.
  * The pcap file is then parsed to extract the features of the network traffic.
- * It is possible to run some attack on the docker container to generate some 
+ * It is possible to run some attack on the docker container to generate some
  * specific network traffic.
  * 
  * The available attacks are: UDPDDOS.
@@ -64,12 +66,14 @@ public class Pcap extends ClassificationGenerator {
 
     // Dataset attributes
     private static final String[] STRING_DATASET_ATTRIBUTES = {
-        "srcIp", "dstIp", "protocol"
+            "srcIp", "dstIp", "protocol"
     };
     private static final String[] INT_DATASET_ATTRIBUTES = {
-        "srcPort", "dstPort", "type", "version", "IHL", "length", "identification", "fragmentOffset", "TTL",  "headerChecksum"
+            "srcPort", "dstPort", "type", "version", "IHL", "length", "identification", "fragmentOffset", "TTL",
+            "headerChecksum", "timeStamp"
     };
-    private static final String[] DATASET_ATTRIBUTES = ArrayUtils.addAll(STRING_DATASET_ATTRIBUTES, INT_DATASET_ATTRIBUTES);
+    private static final String[] DATASET_ATTRIBUTES = ArrayUtils.addAll(STRING_DATASET_ATTRIBUTES,
+            INT_DATASET_ATTRIBUTES);
     
     // Dataset attributes
     private static Map<String, Attribute> datasetAttributes = new HashMap<String, Attribute>();
@@ -88,6 +92,7 @@ public class Pcap extends ClassificationGenerator {
     private static String[] TTLs;
     private static String[] protocols;
     private static String[] headerChecksums;
+    private static int[] timestamps;
 
     // Regex patterns
     private static final Pattern DEST_ADDR_PATTERN = Pattern.compile("Destination address: /([\\d.]+)");
@@ -106,7 +111,7 @@ public class Pcap extends ClassificationGenerator {
 
     // Generator accepted attribute
     private static final String[] ACCEPTED_DOCKER_IMAGES = {
-        "fersuy/contackgen-ubuntu2204:1.1.0"
+            "fersuy/contackgen-ubuntu2204:1.1.0"
     };
 
     // Generator attributes
@@ -114,6 +119,9 @@ public class Pcap extends ClassificationGenerator {
     protected String pcapFullPath;
     protected int duration;
     protected int maxPackets;
+
+    // TimeStamp
+    private static Timestamp startTime;
 
     /**
      * Initialize the generator with the default values.
@@ -131,18 +139,18 @@ public class Pcap extends ClassificationGenerator {
      * Returns a string describing this data generator.
      * 
      * @return a description of the generator suitable for displaying in the
-     *        explorer/experimenter gui.
+     *         explorer/experimenter gui.
      */
     public String globalInfo() {
         return "Generates a contexctual dataset of network traffic. The dataset is generated "
-            + "from a simulation of a network traffic. The simulation is done using a docker."
-            + "The docker container capture the network traffic and save into a pcap file."
-            + "The pcap file is then parsed to extract the features of the network traffic."
-            +  "It is possible to run some attack on the docker container to generate some "
-            +  "specific network traffic.\n"
-            +  "The available attacks are: UDPDDOS.\n"
-            +  "The available docker images are:\n"
-            +  "- fersuy/contackgen-ubuntu2204:1.1.0\n";
+                + "from a simulation of a network traffic. The simulation is done using a docker."
+                + "The docker container capture the network traffic and save into a pcap file."
+                + "The pcap file is then parsed to extract the features of the network traffic."
+                + "It is possible to run some attack on the docker container to generate some "
+                + "specific network traffic.\n"
+                + "The available attacks are: UDPDDOS.\n"
+                + "The available docker images are:\n"
+                + "- fersuy/contackgen-ubuntu2204:1.1.0\n";
     }
 
     /**
@@ -154,18 +162,18 @@ public class Pcap extends ClassificationGenerator {
     public Enumeration<Option> listOptions() {
         Vector<Option> newVector = enumToVector(super.listOptions());
 
-        newVector.add( new Option("\tThe docker image to use for the simulation. (default: "
-            + defaultDockerImage() + ")", "dockerImage", 1, "-dockerImage <dockerImage>"));
-        newVector.add( new Option("\tThe network traffic captur duration. (default: "
-            + defaultDuration() + ")", "duration", 1, "-duration <duration>"));
-        newVector.add( new Option("\tThe pcap directory. (default: "
-            + defaultPcapFullPath() + ")", "pcapFullPath", 1, "-pcapFullPath <pcapFullPath>"));
-        newVector.add( new Option("\tThe max number of packets to parse. (default: "
-            + defaultMaxPackets() + ")", "maxPackets", 1, "-maxPackets <maxPackets>"));
+        newVector.add(new Option("\tThe docker image to use for the simulation. (default: "
+                + defaultDockerImage() + ")", "dockerImage", 1, "-dockerImage <dockerImage>"));
+        newVector.add(new Option("\tThe network traffic captur duration. (default: "
+                + defaultDuration() + ")", "duration", 1, "-duration <duration>"));
+        newVector.add(new Option("\tThe pcap directory. (default: "
+                + defaultPcapFullPath() + ")", "pcapFullPath", 1, "-pcapFullPath <pcapFullPath>"));
+        newVector.add(new Option("\tThe max number of packets to parse. (default: "
+                + defaultMaxPackets() + ")", "maxPackets", 1, "-maxPackets <maxPackets>"));
 
         return newVector.elements();
     }
-    
+
     /**
      * Parses a given list of options.
      * 
@@ -242,10 +250,10 @@ public class Pcap extends ClassificationGenerator {
     }
 
     /**
-    * returns the default Docker image.
-    * 
-    * @return the default Docker image.
-    */
+     * returns the default Docker image.
+     * 
+     * @return the default Docker image.
+     */
     protected String defaultDockerImage() {
         return "fersuy/contackgen-ubuntu2204:1.1.0";
     }
@@ -321,8 +329,7 @@ public class Pcap extends ClassificationGenerator {
     public void setDockerImage(String dockerImage) {
         if (Arrays.asList(ACCEPTED_DOCKER_IMAGES).contains(dockerImage)) {
             this.dockerImage = dockerImage;
-        }
-        else {
+        } else {
             throw new IllegalArgumentException("The docker image " + dockerImage + " is not supported.");
         }
     }
@@ -352,8 +359,7 @@ public class Pcap extends ClassificationGenerator {
 
         // Convert the pcap directory to a Path object
         Path path = Paths.get(pcapDir);
-        
-        
+
         // Check if the pcap directory exists
         if (!Files.exists(path) || !Files.isDirectory(path)) {
             // Throw an exception if the pcap directory does not exist
@@ -361,7 +367,8 @@ public class Pcap extends ClassificationGenerator {
         }
 
         // Create absolute full path
-        this.pcapFullPath = path.toAbsolutePath().toString() + "/" + pcapFullPath.substring(pcapFullPath.lastIndexOf("/") + 1);
+        this.pcapFullPath = path.toAbsolutePath().toString() + "/"
+                + pcapFullPath.substring(pcapFullPath.lastIndexOf("/") + 1);
     }
 
     /**
@@ -374,17 +381,17 @@ public class Pcap extends ClassificationGenerator {
     }
 
     /**
-    * Initializes the format for the dataset produced. Must be called before the
-    * generateExample or generateExamples methods are used. 
-    *
-    * Basicaly Re-initializes the random number generator with the given seed. But 
-    * NOT IN OUR USECASE, we don't use random seed because or datagenration is 
-    * contexctual and not unitary and reproduceable
-    * 
-    * @return the format for the dataset
-    * @throws Exception if the generating of the format failed
-    * @see #getSeed()
-    */
+     * Initializes the format for the dataset produced. Must be called before the
+     * generateExample or generateExamples methods are used.
+     *
+     * Basicaly Re-initializes the random number generator with the given seed. But
+     * NOT IN OUR USECASE, we don't use random seed because or datagenration is
+     * contexctual and not unitary and reproduceable
+     * 
+     * @return the format for the dataset
+     * @throws Exception if the generating of the format failed
+     * @see #getSeed()
+     */
     @Override
     public Instances defineDataFormat() throws Exception {
         // Set up the attributes
@@ -404,7 +411,7 @@ public class Pcap extends ClassificationGenerator {
 
     /**
      * Do nothing because the dataset is already isn't unatrily generated.
-     * (basicaly the generateExamples call the generateExample method 
+     * (basicaly the generateExamples call the generateExample method
      * several times to generate the dataset, in our case the generateExamples
      * will genereted the dataset without unitary and reproduceable action)
      * 
@@ -529,12 +536,12 @@ public class Pcap extends ClassificationGenerator {
     }
 
     /**
-    * Generates a comment string that documentates the data generator. By default
-    * this string is added at the beginning of the produced output as ARFF file
-    * type, next after the options.
-    * 
-    * @return string contains info about the generated rules
-    */
+     * Generates a comment string that documentates the data generator. By default
+     * this string is added at the beginning of the produced output as ARFF file
+     * type, next after the options.
+     * 
+     * @return string contains info about the generated rules
+     */
     @Override
     public String generateStart() throws Exception {
         return "";
@@ -551,7 +558,6 @@ public class Pcap extends ClassificationGenerator {
         return null;
     }
 
-
     /**
      * I not understand what is this method for.
      */
@@ -561,10 +567,10 @@ public class Pcap extends ClassificationGenerator {
     }
 
     /**
-    * Returns the revision string.
-    * 
-    * @return the revision
-    */
+     * Returns the revision string.
+     * 
+     * @return the revision
+     */
     @Override
     public String getRevision() {
         return RevisionUtils.extract("$Revision: 99999 $");
@@ -603,6 +609,9 @@ public class Pcap extends ClassificationGenerator {
                 String packetString = packet.toString();
                 if (packetString.contains("UDP")) {
                     parsePacket(packetString);
+                    // get packet timestamp format since the beginning of the capture
+                    long timeDiffInMillis = handle.getTimestamp().getTime() - startTime.getTime();
+                    timestamps = ArrayUtils.add(timestamps, (int) timeDiffInMillis);
                 }
 
             } catch (TimeoutException e) {
@@ -699,7 +708,7 @@ public class Pcap extends ClassificationGenerator {
             headerChecksums = ArrayUtils.add(headerChecksums, headerChecksumMatcher.group(1));
         }
     }
-    
+
     /**
      * Run a docker container.
      * Execute the payload.sh script in the container.
@@ -711,7 +720,8 @@ public class Pcap extends ClassificationGenerator {
      * 
      * @param dockerImage the docker image to run
      */
-    private static void runDocker(String dockerImage, int duration, String pcapFullPath) throws InterruptedException, IOException {
+    private static void runDocker(String dockerImage, int duration, String pcapFullPath)
+            throws InterruptedException, IOException {
         System.out.println("Run Docker");
 
         // Docker parameters
@@ -736,12 +746,13 @@ public class Pcap extends ClassificationGenerator {
 
         // Sleep 2 seconds
         Thread.sleep(2000);
-                
+
         // Execute the payload.sh in the container
         System.out.println("Execute payload.sh in the container");
         dockerClient
-            .execStartCmd(dockerClient.execCreateCmd(containerName).withAttachStdout(true).withCmd("bash", "-c", "./payload.sh -d " + duration).exec().getId())
-            .exec(new ExecStartResultCallback(System.out, System.err));
+                .execStartCmd(dockerClient.execCreateCmd(containerName).withAttachStdout(true)
+                        .withCmd("bash", "-c", "./payload.sh -d " + duration).exec().getId())
+                .exec(new ExecStartResultCallback(System.out, System.err));
 
         // Sleep 2 seconds
         Thread.sleep(2000);
@@ -757,6 +768,7 @@ public class Pcap extends ClassificationGenerator {
         System.out.println("Start UDP DOS");
         UDPDos udp = new UDPDos(ipAddress);
         udp.start();
+        startTime = new Timestamp(System.currentTimeMillis());
 
         // Sleep 20 seconds
         Thread.sleep(duration * 1000);
@@ -786,7 +798,7 @@ public class Pcap extends ClassificationGenerator {
     /**
      * Untar a file.
      * 
-     * @param tis the tar input stream
+     * @param tis      the tar input stream
      * @param destFile the destination file
      * @throws IOException
      */
