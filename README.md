@@ -43,7 +43,7 @@ Run le main de la classe weka.gui.GUIChooser
   - [X] Execute the payload inside the container with duration and pcap full path as args (remote exec command in container)
   - [X] Cleaning code (add comments, add error handling, ...)
 - [X] Add time epoch in the Weka dataset
-- [ ] Make possible to have string data in the Weka dataset
+- [X] Make possible to have string data in the Weka dataset
 - [ ] Make our extension a plugin
 - [ ] Design a new backend architecture, maybe with many containers that permit to have one container that capture traffic from the victim and another container that emulate the victim. That will permit to have a more realistic simulation with any type of docker images for the victim.
 

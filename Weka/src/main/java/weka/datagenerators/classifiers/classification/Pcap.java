@@ -10,6 +10,8 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Enumeration;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Vector;
 import java.util.concurrent.TimeoutException;
 import java.util.regex.Matcher;
@@ -68,19 +70,24 @@ public class Pcap extends ClassificationGenerator {
         "srcPort", "dstPort", "type", "version", "IHL", "length", "identification", "fragmentOffset", "TTL",  "headerChecksum"
     };
     private static final String[] DATASET_ATTRIBUTES = ArrayUtils.addAll(STRING_DATASET_ATTRIBUTES, INT_DATASET_ATTRIBUTES);
-    private static int[] srcIps;
-    private static int[] dstIps;
-    private static int[] srcPorts;
-    private static int[] dstPorts;
-    private static int[] types;
-    private static int[] versions;
-    private static int[] IHLs;
-    private static int[] lengths;
-    private static int[] identifications;
-    private static int[] fragmentOffsets;
-    private static int[] TTLs;
-    private static int[] protocols;
-    private static int[] headerChecksums;
+    
+    // Dataset attributes
+    private static Map<String, Attribute> datasetAttributes = new HashMap<String, Attribute>();
+
+    // Pcap attributes
+    private static String[] srcIps;
+    private static String[] dstIps;
+    private static String[] srcPorts;
+    private static String[] dstPorts;
+    private static String[] types;
+    private static String[] versions;
+    private static String[] IHLs;
+    private static String[] lengths;
+    private static String[] identifications;
+    private static String[] fragmentOffsets;
+    private static String[] TTLs;
+    private static String[] protocols;
+    private static String[] headerChecksums;
 
     // Regex patterns
     private static final Pattern DEST_ADDR_PATTERN = Pattern.compile("Destination address: /([\\d.]+)");
@@ -382,16 +389,12 @@ public class Pcap extends ClassificationGenerator {
     public Instances defineDataFormat() throws Exception {
         // Set up the attributes
         ArrayList<Attribute> atts = new ArrayList<Attribute>();
-        // for (String attribute : STRING_DATASET_ATTRIBUTES) {
-        //     atts.add(new Attribute(attribute, (ArrayList<String>) null));
-        // }
-        // for (String attribute : INT_DATASET_ATTRIBUTES) {
-        //     atts.add(new Attribute(attribute));
-        // }
 
-        // Debug
         for (String attribute : DATASET_ATTRIBUTES) {
-            atts.add(new Attribute(attribute));
+            // Define new attribute
+            Attribute m_att = new Attribute(attribute, (ArrayList<String>) null);
+            datasetAttributes.put(attribute, m_att);
+            atts.add(m_att);
         }
 
         m_DatasetFormat = new Instances(getRelationNameToUse(), atts, 0);
@@ -424,6 +427,9 @@ public class Pcap extends ClassificationGenerator {
      */
     @Override
     public Instances generateExamples() throws Exception {
+        // DEBUG LOG
+        System.out.println("Generating dataset...");
+
         // Check if the dataset format is defined
         if (m_DatasetFormat == null) {
             throw new Exception("Dataset format not defined.");
@@ -432,24 +438,94 @@ public class Pcap extends ClassificationGenerator {
         // Start the docker container
         runDocker(getDockerImage(), getDuration(), getPcapFullPath());
 
-        
-
+        // DEBUG LOG
+        System.out.println("Loop on the packets...");
         Instances result = new Instances(m_DatasetFormat, 0);
-        double[] atts;
+        // double[] atts;
         for (int i = 0; i < getMaxPackets(); i++) {
             // Equivalent to the generateExample method
-            Instance instance = null;
-            atts = new double[] {
-                    srcIps[i], dstIps[i], srcPorts[i], dstPorts[i], types[i], versions[i],
-                    IHLs[i], lengths[i], identifications[i],
-                    fragmentOffsets[i], TTLs[i], protocols[i], headerChecksums[i] };
-            instance = new DenseInstance(1.0, atts);
-            instance.setDataset(m_DatasetFormat);
+
+            // Create a new instance with the same format as the dataset
+            Instance instance = new DenseInstance(m_DatasetFormat.numAttributes());
+            instance.setDataset(getDatasetFormat());
+
+            // Set the attributes values
+            for (Map.Entry<String, Attribute> entry : datasetAttributes.entrySet()) {
+                String attString = entry.getKey();
+                Attribute attObj = (Attribute) entry.getValue();
+
+                // Set the value of the attribute
+                String attsValue = setAttributeValue(i, attString);
+
+                // Check string value already exist
+                if (attObj.indexOfValue(attsValue) == -1) {
+                    // Add the string value
+                    int addRes = attObj.addStringValue(attsValue);
+                    if (addRes != attObj.numValues() - 1) {
+                        throw new Exception("Error adding string value '" + attsValue + "' to attribute '" + attString + "' (wrong type).");
+                    }
+                }
+                instance.setValue(attObj, attsValue);
+            }
 
             result.add(instance);
         }
 
         return result;
+    }
+
+    /**
+     * Sets the value of an attribute.
+     * 
+     * @param i the index of the attribute.
+     * @param attString the name of the attribute.
+     * @return the value of the attribute.
+     */
+    private String setAttributeValue(int i, String attString) {
+        // Switch on the attsString to set the attsvalue
+        String attsValue = "";
+        switch (attString) {
+            case "srcIp":
+                attsValue = srcIps[i];
+                break;
+            case "dstIp":
+                attsValue = dstIps[i];
+                break;
+            case "srcPort":
+                attsValue = srcPorts[i];
+                break;
+            case "dstPort":
+                attsValue = dstPorts[i];
+                break;
+            case "type":
+                attsValue = types[i];
+                break;
+            case "version":
+                attsValue = versions[i];
+                break;
+            case "IHL":
+                attsValue = IHLs[i];
+                break;
+            case "length":
+                attsValue = lengths[i];
+                break;
+            case "identification":
+                attsValue = identifications[i];
+                break;
+            case "fragmentOffset":
+                attsValue = fragmentOffsets[i];
+                break;
+            case "TTL":
+                attsValue = TTLs[i];
+                break;
+            case "protocol":
+                attsValue = protocols[i];
+                break;
+            case "headerChecksum":
+                attsValue = headerChecksums[i];
+                break;
+        }
+        return attsValue;
     }
 
     /**
@@ -545,89 +621,82 @@ public class Pcap extends ClassificationGenerator {
      * @param packet the packet to parse
      */
     private static void parsePacket(String packet) {
+        // Parse the destination IP address
         Matcher destAddrMatcher = DEST_ADDR_PATTERN.matcher(packet);
         if (destAddrMatcher.find()) {
-            String ip = destAddrMatcher.group(1);
-            int ipInt = Integer.parseInt(ip.replace(".", ""));
-            dstIps = ArrayUtils.add(dstIps, ipInt);
-            // System.out.println("ipsrc: " + ipInt);
+            dstIps = ArrayUtils.add(dstIps, destAddrMatcher.group(1));
         }
 
+        // Parse the source IP address
         Matcher srcAddrMatcher = SRC_ADDR_PATTERN.matcher(packet);
         if (srcAddrMatcher.find()) {
-            String ip = srcAddrMatcher.group(1);
-            int ipInt = Integer.parseInt(ip.replace(".", ""));
-            srcIps = ArrayUtils.add(srcIps, ipInt);
-            // System.out.println("ipdst: " + ipInt);
+            srcIps = ArrayUtils.add(srcIps, srcAddrMatcher.group(1));
         }
 
+        // Parse the type
         Matcher typeMatcher = TYPE_PATTERN.matcher(packet);
         if (typeMatcher.find()) {
-            String typeHex = typeMatcher.group(1);
-            // System.out.println("typeHex: " + typeHex);
-            types = ArrayUtils.add(types, Integer.parseInt(typeHex.substring(2), 16));
-            // System.out.println("type: " + Integer.parseInt(typeHex.substring(2), 16));
+            types = ArrayUtils.add(types, typeMatcher.group(1));
         }
+
+        // Parse the source port
         Matcher srcPortMatcher = SRC_PORT_PATTERN.matcher(packet);
         if (srcPortMatcher.find()) {
-            srcPorts = ArrayUtils.add(srcPorts, Integer.parseInt(srcPortMatcher.group(1)));
-            // System.out.println("portsrc: " + srcPortMatcher.group(1));
+            srcPorts = ArrayUtils.add(srcPorts, srcPortMatcher.group(1));
         }
 
+        // Parse the destination port
         Matcher destPortMatcher = DEST_PORT_PATTERN.matcher(packet);
         if (destPortMatcher.find()) {
-            dstPorts = ArrayUtils.add(dstPorts, Integer.parseInt(destPortMatcher.group(1)));
-            // System.out.println("portdst: " + destPortMatcher.group(1));
+            dstPorts = ArrayUtils.add(dstPorts, destPortMatcher.group(1));
         }
 
+        // Parse the version
         Matcher versionMatcher = VERSION_PATTERN.matcher(packet);
         if (versionMatcher.find()) {
-            versions = ArrayUtils.add(versions, Integer.parseInt(versionMatcher.group(1)));
-            // System.out.println("version: " + versionMatcher.group(1));
+            versions = ArrayUtils.add(versions, versionMatcher.group(1));
         }
 
+        // Parse the IHL
         Matcher ihlMatcher = IHL_PATTERN.matcher(packet);
         if (ihlMatcher.find()) {
-            IHLs = ArrayUtils.add(IHLs, Integer.parseInt(ihlMatcher.group(1)));
-            // System.out.println("ihl: " + ihlMatcher.group(1));
+            IHLs = ArrayUtils.add(IHLs, ihlMatcher.group(1));
         }
 
+        // Parse the length
         Matcher lengthMatcher = LENGTH_PATTERN.matcher(packet);
         if (lengthMatcher.find()) {
-            lengths = ArrayUtils.add(lengths, Integer.parseInt(lengthMatcher.group(1)));
-            // System.out.println("length: " + lengthMatcher.group(1));
+            lengths = ArrayUtils.add(lengths, lengthMatcher.group(1));
         }
 
+        // Parse the identification
         Matcher identificationMatcher = IDENTIFICATION_PATTERN.matcher(packet);
         if (identificationMatcher.find()) {
-            identifications = ArrayUtils.add(identifications, Integer.parseInt(identificationMatcher.group(1)));
-            // System.out.println("identification: " + identificationMatcher.group(1));
+            identifications = ArrayUtils.add(identifications, identificationMatcher.group(1));
         }
 
+        // Parse the fragment offset
         Matcher fragmentOffsetMatcher = FRAGMENT_OFFSET_PATTERN.matcher(packet);
         if (fragmentOffsetMatcher.find()) {
-            fragmentOffsets = ArrayUtils.add(fragmentOffsets, Integer.parseInt(fragmentOffsetMatcher.group(1)));
-            // System.out.println("fragmentOffset: " + fragmentOffsetMatcher.group(1));
+            fragmentOffsets = ArrayUtils.add(fragmentOffsets, fragmentOffsetMatcher.group(1));
         }
 
+        // Parse the TTL
         Matcher ttlMatcher = TTL_PATTERN.matcher(packet);
         if (ttlMatcher.find()) {
-            TTLs = ArrayUtils.add(TTLs, Integer.parseInt(ttlMatcher.group(1)));
-            // System.out.println("ttl: " + ttlMatcher.group(1));
+            TTLs = ArrayUtils.add(TTLs, ttlMatcher.group(1));
         }
 
+        // Parse the protocol
         Matcher protocolMatcher = PROTOCOL_PATTERN.matcher(packet);
         if (protocolMatcher.find()) {
-            protocols = ArrayUtils.add(protocols, Integer.parseInt(protocolMatcher.group(1)));
-            // System.out.println("protocol: " + protocolMatcher.group(1));
+            protocols = ArrayUtils.add(protocols, protocolMatcher.group(1));
         }
 
+        // Parse the header checksum
         Matcher headerChecksumMatcher = HEADER_CHECKSUM_PATTERN.matcher(packet);
         if (headerChecksumMatcher.find()) {
-            String headerChecksumHex = headerChecksumMatcher.group(1);
-            headerChecksums = ArrayUtils.add(headerChecksums, Integer.parseInt(headerChecksumHex.substring(2), 16));
-            // System.out.println("headerChecksum: " +
-            // Integer.parseInt(headerChecksumHex.substring(2), 16));
+            headerChecksums = ArrayUtils.add(headerChecksums, headerChecksumMatcher.group(1));
         }
     }
     
