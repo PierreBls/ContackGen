@@ -8,10 +8,13 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.sql.Timestamp;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Date;
 import java.util.Enumeration;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Vector;
 import java.util.concurrent.TimeoutException;
@@ -30,7 +33,11 @@ import org.pcap4j.packet.Packet;
 
 import com.github.dockerjava.api.DockerClient;
 import com.github.dockerjava.api.command.CreateContainerCmd;
+import com.github.dockerjava.api.command.PullImageResultCallback;
+import com.github.dockerjava.api.exception.NotFoundException;
+import com.github.dockerjava.api.model.Container;
 import com.github.dockerjava.api.model.ContainerNetwork;
+import com.github.dockerjava.api.model.Image;
 import com.github.dockerjava.core.DockerClientBuilder;
 import com.github.dockerjava.core.command.ExecStartResultCallback;
 
@@ -57,19 +64,23 @@ import weka.datagenerators.ClassificationGenerator;
  * The available docker images are:
  * - fersuy/contackgen-ubuntu2204:1.1.0
  * 
- * @author Mathieu Salliot (SanjiKush on GitHub).
- * @author Pierre BLAIS (pierreblais or PierreBls on GitHub).
+ * @author Mathieu Salliot (SanjiKush on GitHub, mathieu.salliot@yahoo.fr).
+ * @author Pierre BLAIS (pierreblais or PierreBls on GitHub, pierreblais@hotmail.fr).
  * 
  * @version idk.
  */
 public class Pcap extends ClassificationGenerator {
 
     // Dataset attributes
-    private static final String[] DATASET_ATTRIBUTES = {
-            "srcIp", "dstIp", "protocol", "srcPort", "dstPort", "type", "version", "IHL", "length", "identification", "fragmentOffset", "TTL",
-            "headerChecksum", "timeStamp"
+    private static final String[] DATASET_ATTRIBUTES_STRINGS = {
+            "srcIp", "dstIp", "srcPort", "dstPort", "type", "headerChecksum"
     };
-    
+    private static final String[] DATASET_ATTRIBUTES_NUMERICS = {
+            "protocol", "version", "IHL", "length", "identification", "fragmentOffset", "TTL", "timer"
+    };
+    private static final String[] DATASET_ATTRIBUTES_TIMESTAMP = {
+            "timeStamp"
+    };
     // Dataset attributes
     private static Map<String, Attribute> datasetAttributes = new HashMap<String, Attribute>();
 
@@ -79,15 +90,16 @@ public class Pcap extends ClassificationGenerator {
     private static String[] srcPorts;
     private static String[] dstPorts;
     private static String[] types;
-    private static String[] versions;
-    private static String[] IHLs;
-    private static String[] lengths;
-    private static String[] identifications;
-    private static String[] fragmentOffsets;
-    private static String[] TTLs;
-    private static String[] protocols;
+    private static int[] versions;
+    private static int[] IHLs;
+    private static int[] lengths;
+    private static int[] identifications;
+    private static int[] fragmentOffsets;
+    private static int[] TTLs;
+    private static int[] protocols;
     private static String[] headerChecksums;
-    private static String[] timestamps;
+    private static int[] timer;
+    private static Timestamp[] timeStamps;
 
     // Regex patterns
     private static final Pattern DEST_ADDR_PATTERN = Pattern.compile("Destination address: /([\\d.]+)");
@@ -112,6 +124,7 @@ public class Pcap extends ClassificationGenerator {
     // Generator attributes
     protected String dockerImage;
     protected String pcapFullPath;
+    protected String timestampFormat;
     protected int duration;
     protected int maxPackets;
 
@@ -128,6 +141,7 @@ public class Pcap extends ClassificationGenerator {
         setDuration(defaultDuration());
         setPcapFullPath(defaultPcapFullPath());
         setMaxPackets(defaultMaxPackets());
+        setTimestampFormat(defaultTimestampFormat());
     }
 
     /**
@@ -165,6 +179,8 @@ public class Pcap extends ClassificationGenerator {
                 + defaultPcapFullPath() + ")", "pcapFullPath", 1, "-pcapFullPath <pcapFullPath>"));
         newVector.add(new Option("\tThe max number of packets to parse. (default: "
                 + defaultMaxPackets() + ")", "maxPackets", 1, "-maxPackets <maxPackets>"));
+        newVector.add(new Option("\tThe timestamp format. (default: "
+                + defaultTimestampFormat() + ")", "timestampFormat", 1, "-timestampFormat <timestampFormat>"));
 
         return newVector.elements();
     }
@@ -210,6 +226,14 @@ public class Pcap extends ClassificationGenerator {
         } else {
             setMaxPackets(defaultMaxPackets());
         }
+
+        // Set the timestamp format
+        String timestampFormat = Utils.getOption("timestampFormat", options);
+        if (timestampFormat.length() != 0) {
+            setTimestampFormat(timestampFormat);
+        } else {
+            setTimestampFormat(defaultTimestampFormat());
+        }
     }
 
     /**
@@ -240,6 +264,10 @@ public class Pcap extends ClassificationGenerator {
         // Add the max number of packets
         newVector.add("-maxPackets");
         newVector.add("" + getMaxPackets());
+
+        // Add the timestamp format
+        newVector.add("-timestampFormat");
+        newVector.add(getTimestampFormat());
 
         return newVector.toArray(new String[0]);
     }
@@ -281,6 +309,15 @@ public class Pcap extends ClassificationGenerator {
     }
 
     /**
+     * returns the default timestamp format.
+     * 
+     * @return the default timestamp format.
+     */
+    protected String defaultTimestampFormat() {
+        return "yyyy-MM-dd HH:mm:ss.SSS";
+    }
+
+    /**
      * Gets the Docker image.
      * 
      * @return the Docker image.
@@ -314,6 +351,15 @@ public class Pcap extends ClassificationGenerator {
      */
     public int getMaxPackets() {
         return maxPackets;
+    }
+
+    /**
+     * Gets the timestamp format.
+     * 
+     * @return the timestamp format.
+     */
+    public String getTimestampFormat() {
+        return timestampFormat;
     }
 
     /**
@@ -376,6 +422,22 @@ public class Pcap extends ClassificationGenerator {
     }
 
     /**
+     * Sets the timestamp format.
+     * 
+     * @param timestampFormat the timestamp format.
+     */
+    public void setTimestampFormat(String timestampFormat) {
+        // Ensure that the timestamp format is valid
+        try {
+            new SimpleDateFormat(timestampFormat);
+        } catch (IllegalArgumentException e) {
+            throw new IllegalArgumentException("The timestamp format " + timestampFormat + " is not valid.");
+        }
+
+        this.timestampFormat = timestampFormat;
+    }
+
+    /**
      * Initializes the format for the dataset produced. Must be called before the
      * generateExample or generateExamples methods are used.
      *
@@ -392,12 +454,24 @@ public class Pcap extends ClassificationGenerator {
         // Set up the attributes
         ArrayList<Attribute> atts = new ArrayList<Attribute>();
 
-        for (String attribute : DATASET_ATTRIBUTES) {
-            // Define new attribute
+        // Define the String attributes
+        for (String attribute : DATASET_ATTRIBUTES_STRINGS) {
             Attribute m_att = new Attribute(attribute, (ArrayList<String>) null);
             datasetAttributes.put(attribute, m_att);
             atts.add(m_att);
         }
+
+        // Define the Numeric attributes
+        for (String attribute : DATASET_ATTRIBUTES_NUMERICS) {
+            Attribute m_att = new Attribute(attribute);
+            datasetAttributes.put(attribute, m_att);
+            atts.add(m_att);
+        }
+
+        // Define the timestamp attribute
+        Attribute m_att = new Attribute("timestamp", getTimestampFormat());
+        datasetAttributes.put("timestamp", m_att);
+        atts.add(m_att);
 
         m_DatasetFormat = new Instances(getRelationNameToUse(), atts, 0);
 
@@ -437,7 +511,7 @@ public class Pcap extends ClassificationGenerator {
         }
 
         // Start the docker container
-        runDocker(getDockerImage(), getDuration(), getPcapFullPath());
+        dockerMain(getDockerImage(), getDuration(), getPcapFullPath());
 
         Instances result = new Instances(m_DatasetFormat, 0);
         for (int i = 0; i < getMaxPackets(); i++) {
@@ -449,21 +523,43 @@ public class Pcap extends ClassificationGenerator {
 
             // Set the attributes values
             for (Map.Entry<String, Attribute> entry : datasetAttributes.entrySet()) {
-                String attString = entry.getKey();
+                String attKey = entry.getKey();
                 Attribute attObj = (Attribute) entry.getValue();
 
-                // Set the value of the attribute
-                String attsValue = setAttributeValue(i, attString);
+                // Check the type of the attribute
+                if (attObj.type() == Attribute.NUMERIC) {
+                    // Set the value of the numeric attribute
+                    double attsValue = setNumericAttributeValue(i, attKey);
 
-                // Check string value already exist
-                if (attObj.indexOfValue(attsValue) == -1) {
-                    // Add the string value
-                    int addRes = attObj.addStringValue(attsValue);
-                    if (addRes != attObj.numValues() - 1) {
-                        throw new Exception("Error adding string value '" + attsValue + "' to attribute '" + attString + "' (wrong type).");
+                    instance.setValue(attObj, attsValue);
+                    continue;
+                } else if (attObj.type() == Attribute.STRING) {
+                    // Set the value of the string attribute
+                    String attsValue = setStringAttributeValue(i, attKey);
+
+                    // Check string value already exist
+                    if (attObj.indexOfValue(attsValue) == -1) {
+                        // Add the string value
+                        int addRes = attObj.addStringValue(attsValue);
+                        if (addRes == -1) {
+                            throw new Exception("Error adding string value '" + attsValue + "' to attribute '" + attKey + "' (wrong type).");
+                        }
                     }
+                    instance.setValue(attObj, attsValue);
+                    continue;
+                } else if (attObj.type() == Attribute.DATE) {
+                    Date dateValue = new Date(timeStamps[i].getTime());
+                    SimpleDateFormat sdf = new SimpleDateFormat(getTimestampFormat());
+                    String attsValue = sdf.format(dateValue);
+                    double dd = attObj.parseDate(attsValue);
+
+                    instance.setValue(attObj, dd);
+                    
+                    continue;
                 }
-                instance.setValue(attObj, attsValue);
+                else {
+                    throw new Exception("Error setting attribute '" + attKey + "' (wrong type).");
+                }
             }
 
             result.add(instance);
@@ -476,28 +572,13 @@ public class Pcap extends ClassificationGenerator {
      * Sets the value of an attribute.
      * 
      * @param i the index of the attribute.
-     * @param attString the name of the attribute.
+     * @param attKey the name of the attribute.
      * @return the value of the attribute.
      */
-    private String setAttributeValue(int i, String attString) {
+    private int setNumericAttributeValue(int i, String attKey) {
         // Switch on the attsString to set the attsvalue
-        String attsValue = "";
-        switch (attString) {
-            case "srcIp":
-                attsValue = srcIps[i];
-                break;
-            case "dstIp":
-                attsValue = dstIps[i];
-                break;
-            case "srcPort":
-                attsValue = srcPorts[i];
-                break;
-            case "dstPort":
-                attsValue = dstPorts[i];
-                break;
-            case "type":
-                attsValue = types[i];
-                break;
+        int attsValue = -1;
+        switch (attKey) {
             case "version":
                 attsValue = versions[i];
                 break;
@@ -519,11 +600,41 @@ public class Pcap extends ClassificationGenerator {
             case "protocol":
                 attsValue = protocols[i];
                 break;
+            case "timer":
+                attsValue = timer[i];
+                break;
+        }
+        return attsValue;
+    }
+
+    /**
+     * Sets the value of an attribute.
+     * 
+     * @param i the index of the attribute.
+     * @param attKey the name of the attribute.
+     * @return the value of the attribute.
+     */
+    private String setStringAttributeValue(int i, String attKey) {
+        // Switch on the attsString to set the attsvalue
+        String attsValue = "";
+        switch (attKey) {
+            case "srcIp":
+                attsValue = srcIps[i];
+                break;
+            case "dstIp":
+                attsValue = dstIps[i];
+                break;
+            case "srcPort":
+                attsValue = srcPorts[i];
+                break;
+            case "dstPort":
+                attsValue = dstPorts[i];
+                break;
+            case "type":
+                attsValue = types[i];
+                break;
             case "headerChecksum":
                 attsValue = headerChecksums[i];
-                break;
-            case "timeStamp":
-                attsValue = timestamps[i];
                 break;
         }
         return attsValue;
@@ -599,14 +710,16 @@ public class Pcap extends ClassificationGenerator {
 
         while (true) {
             try {
+                // Read packet
                 Packet packet = handle.getNextPacketEx();
                 String packetString = packet.toString();
-                if (packetString.contains("UDP")) {
-                    parsePacket(packetString);
-                    // get packet timestamp format since the beginning of the capture
-                    long timeDiffInMillis = handle.getTimestamp().getTime() - startTime.getTime();
-                    timestamps = ArrayUtils.add(timestamps, String.valueOf(timeDiffInMillis));
-                }
+                parsePacket(packetString);
+
+                // Set the packet timestamp
+                timeStamps = ArrayUtils.add(timeStamps, handle.getTimestamp());
+                // Update the timer
+                long timeDiffInMillis = handle.getTimestamp().getTime() - startTime.getTime();
+                timer = ArrayUtils.add(timer, (int)timeDiffInMillis);
 
             } catch (TimeoutException e) {
             } catch (EOFException e) {
@@ -627,78 +740,104 @@ public class Pcap extends ClassificationGenerator {
         // Parse the destination IP address
         Matcher destAddrMatcher = DEST_ADDR_PATTERN.matcher(packet);
         if (destAddrMatcher.find()) {
+            // DEBUG LOG
+            // System.out.println("Destination IP: " + destAddrMatcher.group(1));
             dstIps = ArrayUtils.add(dstIps, destAddrMatcher.group(1));
         }
 
         // Parse the source IP address
         Matcher srcAddrMatcher = SRC_ADDR_PATTERN.matcher(packet);
         if (srcAddrMatcher.find()) {
+            // DEBUG LOG
+            // System.out.println("Source IP: " + srcAddrMatcher.group(1));
             srcIps = ArrayUtils.add(srcIps, srcAddrMatcher.group(1));
         }
 
         // Parse the type
         Matcher typeMatcher = TYPE_PATTERN.matcher(packet);
         if (typeMatcher.find()) {
+            // DEBUG LOG
+            // System.out.println("Type: " + typeMatcher.group(1));
             types = ArrayUtils.add(types, typeMatcher.group(1));
         }
 
         // Parse the source port
         Matcher srcPortMatcher = SRC_PORT_PATTERN.matcher(packet);
         if (srcPortMatcher.find()) {
+            // DEBUG LOG
+            // System.out.println("Source port: " + srcPortMatcher.group(1));
             srcPorts = ArrayUtils.add(srcPorts, srcPortMatcher.group(1));
         }
 
         // Parse the destination port
         Matcher destPortMatcher = DEST_PORT_PATTERN.matcher(packet);
         if (destPortMatcher.find()) {
+            // DEBUG LOG
+            // System.out.println("Destination port: " + destPortMatcher.group(1));
             dstPorts = ArrayUtils.add(dstPorts, destPortMatcher.group(1));
         }
 
         // Parse the version
         Matcher versionMatcher = VERSION_PATTERN.matcher(packet);
         if (versionMatcher.find()) {
-            versions = ArrayUtils.add(versions, versionMatcher.group(1));
+            // DEBUG LOG
+            // System.out.println("Version: " + versionMatcher.group(1));
+            versions = ArrayUtils.add(versions, Integer.parseInt(versionMatcher.group(1)));
         }
 
         // Parse the IHL
         Matcher ihlMatcher = IHL_PATTERN.matcher(packet);
         if (ihlMatcher.find()) {
-            IHLs = ArrayUtils.add(IHLs, ihlMatcher.group(1));
+            // DEBUG LOG
+            // System.out.println("IHL: " + ihlMatcher.group(1));
+            IHLs = ArrayUtils.add(IHLs, Integer.parseInt(ihlMatcher.group(1)));
         }
 
         // Parse the length
         Matcher lengthMatcher = LENGTH_PATTERN.matcher(packet);
         if (lengthMatcher.find()) {
-            lengths = ArrayUtils.add(lengths, lengthMatcher.group(1));
+            // DEBUG LOG
+            // System.out.println("Length: " + lengthMatcher.group(1));
+            lengths = ArrayUtils.add(lengths, Integer.parseInt(lengthMatcher.group(1)));
         }
 
         // Parse the identification
         Matcher identificationMatcher = IDENTIFICATION_PATTERN.matcher(packet);
         if (identificationMatcher.find()) {
-            identifications = ArrayUtils.add(identifications, identificationMatcher.group(1));
+            // DEBUG LOG
+            // System.out.println("Identification: " + identificationMatcher.group(1));
+            identifications = ArrayUtils.add(identifications, Integer.parseInt(identificationMatcher.group(1)));
         }
 
         // Parse the fragment offset
         Matcher fragmentOffsetMatcher = FRAGMENT_OFFSET_PATTERN.matcher(packet);
         if (fragmentOffsetMatcher.find()) {
-            fragmentOffsets = ArrayUtils.add(fragmentOffsets, fragmentOffsetMatcher.group(1));
+            // DEBUG LOG
+            // System.out.println("Fragment offset: " + fragmentOffsetMatcher.group(1));
+            fragmentOffsets = ArrayUtils.add(fragmentOffsets, Integer.parseInt(fragmentOffsetMatcher.group(1)));
         }
 
         // Parse the TTL
         Matcher ttlMatcher = TTL_PATTERN.matcher(packet);
         if (ttlMatcher.find()) {
-            TTLs = ArrayUtils.add(TTLs, ttlMatcher.group(1));
+            // DEBUG LOG
+            // System.out.println("TTL: " + ttlMatcher.group(1));
+            TTLs = ArrayUtils.add(TTLs, Integer.parseInt(ttlMatcher.group(1)));
         }
 
         // Parse the protocol
         Matcher protocolMatcher = PROTOCOL_PATTERN.matcher(packet);
         if (protocolMatcher.find()) {
-            protocols = ArrayUtils.add(protocols, protocolMatcher.group(1));
+            // DEBUG LOG
+            // System.out.println("Protocol: " + protocolMatcher.group(1));
+            protocols = ArrayUtils.add(protocols, Integer.parseInt(protocolMatcher.group(1)));
         }
 
         // Parse the header checksum
         Matcher headerChecksumMatcher = HEADER_CHECKSUM_PATTERN.matcher(packet);
         if (headerChecksumMatcher.find()) {
+            // DEBUG LOG
+            // System.out.println("Header checksum: " + headerChecksumMatcher.group(1));
             headerChecksums = ArrayUtils.add(headerChecksums, headerChecksumMatcher.group(1));
         }
     }
@@ -711,10 +850,11 @@ public class Pcap extends ClassificationGenerator {
      * Stop the container.
      * Remove the container.
      * Parse the pcap file.
+     * And manage the multi-threading.
      * 
      * @param dockerImage the docker image to run
      */
-    private static void runDocker(String dockerImage, int duration, String pcapFullPath)
+    private static void dockerMain(String dockerImage, int duration, String pcapFullPath)
             throws InterruptedException, IOException {
         System.out.println("Run Docker");
 
@@ -726,6 +866,196 @@ public class Pcap extends ClassificationGenerator {
         System.out.println("Get Docker client");
         DockerClient dockerClient = DockerClientBuilder.getInstance().build();
 
+        // Check if the container is already running
+        if (dockerContainerExists(containerName, dockerClient)) {
+            System.out.println("Container already exists");
+            dockerStop(containerName, dockerClient);
+            DockerRm(containerName, dockerClient);
+        }
+
+        // Check if the image exists
+        if (!dockerImageExists(dockerImage, dockerClient)) {
+            // Pull the image
+            dockerPull(dockerImage, dockerClient);
+        }
+
+        // Run the container
+        dockerRun(dockerImage, containerName, dockerClient);
+
+
+        // Sleep 2 seconds
+        Thread.sleep(2000);
+
+        // Create the command to execute
+        String command = "./payload.sh -d " + duration;
+        dockerExec(command, containerName, dockerClient);
+
+        // Sleep 2 seconds
+        Thread.sleep(2000);
+
+        // Get the IP address of the container
+        String ipAddress = dockerInspectIP(containerName, dockerClient);
+
+        // Start UDP DOS
+        System.out.println("Start UDP DOS");
+        UDPDos udp = new UDPDos(ipAddress);
+        udp.start();
+
+        // Sleep 20 seconds
+        Thread.sleep(duration * 1000);
+
+        dockerCp(pcapFullPath, containerName, containerFile, dockerClient);
+
+        dockerStop(containerName, dockerClient);
+
+        DockerRm(containerName, dockerClient);
+
+        try {
+            readPcap(pcapFullPath);
+        } catch (PcapNativeException | NotOpenException e) {
+            e.printStackTrace();
+        }
+    }
+
+    /**
+     * Pull a docker image.
+     * 
+     * @param dockerImage the docker image to pull
+     * @param dockerClient the Docker client
+     * @throws InterruptedException
+     */
+    private static void dockerPull(String dockerImage, DockerClient dockerClient) throws InterruptedException {
+        System.out.println("Pull image " + dockerImage);
+        try {
+            dockerClient.pullImageCmd(dockerImage).exec(new PullImageResultCallback()).awaitCompletion();
+        } catch (NotFoundException e) {
+            throw new RuntimeException("Error while pulling image: " + dockerImage);
+        }
+    }
+
+
+    /**
+     * Check if a given Docker image exists localy.
+     * 
+     * @param dockerImage the docker image to run
+     * @param dockerClient the Docker client
+     */
+    private static boolean dockerImageExists(String dockerImage, DockerClient dockerClient) {
+        System.out.println("Check if image " + dockerImage + " exists localy");
+        List<Image> images = dockerClient.listImagesCmd().exec();
+        for (Image image : images) {
+            for (String repoTag : image.getRepoTags()) {
+                if (repoTag.equals(dockerImage)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Check if a container exists.
+     * 
+     * @param containerName the name of the container
+     * @param dockerClient the Docker client
+     * @return true if the container exists, false otherwise
+     */
+    private static boolean dockerContainerExists(String containerName, DockerClient dockerClient) {
+        System.out.println("Check if container " + containerName + " is already running");
+        List<Container> containers = dockerClient.listContainersCmd().withShowAll(true).exec();
+        for (Container container : containers) {
+            if (container.getNames()[0].equals("/" + containerName)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Remove the given docker image.
+     * 
+     * @param containerName the name of the container
+     * @param dockerClient the Docker client
+     */
+    private static void DockerRm(String containerName, DockerClient dockerClient) {
+        // Remove container
+        System.out.println("Remove the container " + containerName);
+        dockerClient.removeContainerCmd(containerName).exec();
+    }
+
+    /**
+     * Stop the given container.
+     * 
+     * @param containerName the name of the container
+     * @param dockerClient the Docker client
+     */
+    private static void dockerStop(String containerName, DockerClient dockerClient) {
+        // Stop container
+        System.out.println("Stop the container " + containerName);
+        dockerClient.killContainerCmd(containerName).exec();
+    }
+
+    /**
+     * Copy file from container
+     * 
+     * @param pcapFullPath the path of the pcap file
+     * @param containerName the name of the container
+     * @param containerFile the path of the pcap file in the container
+     * @param dockerClient the Docker client
+     * @throws IOException
+     */
+    private static void dockerCp(String localPath, String containerName, String containerFile,
+            DockerClient dockerClient) throws IOException {
+        System.out.println("Copy file from container");
+        // Copy file from container
+        try (TarArchiveInputStream tarStream = new TarArchiveInputStream(
+                dockerClient.copyArchiveFromContainerCmd(containerName,
+                        containerFile).exec())) {
+            unTar(tarStream, new File(localPath));
+        }
+    }
+
+    /**
+     * docker Inspect IP address.
+     * 
+     * @param containerName
+     * @param dockerClient
+     * @return the ip address of the container
+     */
+    private static String dockerInspectIP(String containerName, DockerClient dockerClient) {
+        // Get Ip address
+        System.out.println("Get IP address");
+        ContainerNetwork network = dockerClient.inspectContainerCmd(containerName).exec().getNetworkSettings()
+                .getNetworks().values().iterator().next();
+        String ipAddress = network.getIpAddress();
+        System.out.println("IP Address: " + ipAddress);
+        return ipAddress;
+    }
+
+    /**
+     * Exec a command in the container.
+     * 
+     * @param command the command to execute
+     * @param containerName the name of the container
+     * @param dockerClient the Docker client
+     */
+    private static void dockerExec(String command, String containerName, DockerClient dockerClient) {
+        // Execute the payload.sh in the container
+        System.out.println("Execute " + command + " in the container");
+        dockerClient
+                .execStartCmd(dockerClient.execCreateCmd(containerName).withAttachStdout(true)
+                        .withCmd("bash", "-c", command).exec().getId())
+                .exec(new ExecStartResultCallback(System.out, System.err));
+    }
+
+    /**
+     * Run a docker container.
+     * 
+     * @param dockerImage the docker image to run
+     * @param containerName the name of the container
+     * @param dockerClient the Docker client
+     */
+    private static void dockerRun(String dockerImage, String containerName, DockerClient dockerClient) {
         // Create container
         System.out.println("Create Docker container");
         try (CreateContainerCmd createContainer = dockerClient
@@ -738,56 +1068,6 @@ public class Pcap extends ClassificationGenerator {
         System.out.println("Start Docker container");
         dockerClient.startContainerCmd(containerName).exec();
         startTime = new Timestamp(System.currentTimeMillis());
-
-
-        // Sleep 2 seconds
-        Thread.sleep(2000);
-
-        // Execute the payload.sh in the container
-        System.out.println("Execute payload.sh in the container");
-        dockerClient
-                .execStartCmd(dockerClient.execCreateCmd(containerName).withAttachStdout(true)
-                        .withCmd("bash", "-c", "./payload.sh -d " + duration).exec().getId())
-                .exec(new ExecStartResultCallback(System.out, System.err));
-
-        // Sleep 2 seconds
-        Thread.sleep(2000);
-
-        // Get Ip address
-        System.out.println("Get IP address");
-        ContainerNetwork network = dockerClient.inspectContainerCmd(containerName).exec().getNetworkSettings()
-                .getNetworks().values().iterator().next();
-        String ipAddress = network.getIpAddress();
-        System.out.println("IP Address: " + ipAddress);
-
-        // Start UDP DOS
-        System.out.println("Start UDP DOS");
-        UDPDos udp = new UDPDos(ipAddress);
-        udp.start();
-
-        // Sleep 20 seconds
-        Thread.sleep(duration * 1000);
-
-        // Copy file from container
-        try (TarArchiveInputStream tarStream = new TarArchiveInputStream(
-                dockerClient.copyArchiveFromContainerCmd(containerName,
-                        containerFile).exec())) {
-            unTar(tarStream, new File(pcapFullPath));
-        }
-
-        // Stop container
-        System.out.println("Stop the container");
-        dockerClient.killContainerCmd(containerName).exec();
-
-        // Remove container
-        System.out.println("Remove container");
-        dockerClient.removeContainerCmd(containerName).exec();
-
-        try {
-            readPcap(pcapFullPath);
-        } catch (PcapNativeException | NotOpenException e) {
-            e.printStackTrace();
-        }
     }
 
     /**
