@@ -39,7 +39,7 @@ import com.github.dockerjava.api.model.Container;
 import com.github.dockerjava.api.model.ContainerNetwork;
 import com.github.dockerjava.api.model.Image;
 import com.github.dockerjava.core.DockerClientBuilder;
-import com.github.dockerjava.core.command.ExecStartResultCallback;
+import com.github.dockerjava.api.async.ResultCallback;
 
 import weka.core.Attribute;
 import weka.core.DenseInstance;
@@ -78,9 +78,9 @@ public class Pcap extends ClassificationGenerator {
     private static final String[] DATASET_ATTRIBUTES_NUMERICS = {
             "protocol", "version", "IHL", "length", "identification", "fragmentOffset", "TTL", "timer"
     };
-    private static final String[] DATASET_ATTRIBUTES_TIMESTAMP = {
-            "timeStamp"
-    };
+    // private static final String[] DATASET_ATTRIBUTES_TIMESTAMP = { // Useless while there is only one timestamp
+    //         "timeStamp"
+    // };
     // Dataset attributes
     private static Map<String, Attribute> datasetAttributes = new HashMap<String, Attribute>();
 
@@ -1042,10 +1042,18 @@ public class Pcap extends ClassificationGenerator {
     private static void dockerExec(String command, String containerName, DockerClient dockerClient) {
         // Execute the payload.sh in the container
         System.out.println("Execute " + command + " in the container");
-        dockerClient
-                .execStartCmd(dockerClient.execCreateCmd(containerName).withAttachStdout(true)
-                        .withCmd("bash", "-c", command).exec().getId())
-                .exec(new ExecStartResultCallback(System.out, System.err));
+        // dockerClient
+        //         .execStartCmd(dockerClient.execCreateCmd(containerName).withAttachStdout(true)
+        //         .withCmd("bash", "-c", command).exec().getId())
+        //         .exec(new ExecStartResultCallback(System.out, System.err));
+        try {
+            dockerClient
+                    .execStartCmd(dockerClient.execCreateCmd(containerName).withAttachStdout(true)
+                            .withCmd("bash", "-c", command).exec().getId())
+                    .exec(new ResultCallback.Adapter<>());
+        } catch (NotFoundException e) {
+            e.printStackTrace();
+        }
     }
 
     /**
