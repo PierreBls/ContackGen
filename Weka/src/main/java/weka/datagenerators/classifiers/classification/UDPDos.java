@@ -44,6 +44,7 @@ public class UDPDos extends Thread {
         DatagramSocket socket = new DatagramSocket();
         socket.send(dataSent);
         socket.close();
+        // System.out.println("packet send to " + url + " on port " + port);
         // System.out.println("UDP attack done! - " + "Thread: ");
     }
 
