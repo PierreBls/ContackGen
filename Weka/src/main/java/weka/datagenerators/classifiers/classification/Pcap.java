@@ -32,7 +32,6 @@ import org.pcap4j.core.Pcaps;
 import org.pcap4j.packet.Packet;
 
 import com.github.dockerjava.api.DockerClient;
-import com.github.dockerjava.api.async.ResultCallback;
 import com.github.dockerjava.api.command.CreateContainerCmd;
 import com.github.dockerjava.api.command.PullImageResultCallback;
 import com.github.dockerjava.api.exception.NotFoundException;
@@ -43,7 +42,6 @@ import com.github.dockerjava.core.DefaultDockerClientConfig;
 import com.github.dockerjava.core.DockerClientBuilder;
 import com.github.dockerjava.core.DockerClientConfig;
 import com.github.dockerjava.core.command.ExecStartResultCallback;
-import com.github.dockerjava.api.async.ResultCallback;
 
 import weka.core.Attribute;
 import weka.core.DenseInstance;
@@ -137,12 +135,16 @@ public class Pcap extends ClassificationGenerator {
     // TimeStamp
     private static Timestamp startTime;
 
+    // OS
+    private static String os;
+
     /**
      * Initialize the generator with the default values.
      */
     public Pcap() {
         super();
 
+        setOs();
         setDockerImage(defaultDockerImage());
         setDuration(defaultDuration());
         setPcapFullPath(defaultPcapFullPath());
@@ -293,7 +295,7 @@ public class Pcap extends ClassificationGenerator {
      * @return the default duration.
      */
     protected int defaultDuration() {
-        return 180;
+        return 20;
     }
 
     /**
@@ -302,6 +304,9 @@ public class Pcap extends ClassificationGenerator {
      * @return the default pcap directory.
      */
     protected String defaultPcapFullPath() {
+        if (os.contains("windows")) {
+            return "capture.pcap";
+        }
         return "/tmp/capture.pcap";
     }
 
@@ -368,6 +373,10 @@ public class Pcap extends ClassificationGenerator {
         return timestampFormat;
     }
 
+    private static void setOs() {
+        os = System.getProperty("os.name").toLowerCase();
+    }
+
     /**
      * Sets the Docker image.
      * 
@@ -400,22 +409,24 @@ public class Pcap extends ClassificationGenerator {
         if (pcapFullPath.length() != 0) {
             this.pcapFullPath = defaultPcapFullPath();
         }
+        if (os.equals("linux")) {
 
-        // Extract the pcap directory
-        String pcapDir = pcapFullPath.substring(0, pcapFullPath.lastIndexOf("/"));
+            // Extract the pcap directory
+            String pcapDir = pcapFullPath.substring(0, pcapFullPath.lastIndexOf("/"));
 
-        // Convert the pcap directory to a Path object
-        Path path = Paths.get(pcapDir);
+            // Convert the pcap directory to a Path object
+            Path path = Paths.get(pcapDir);
 
-        // Check if the pcap directory exists
-        if (!Files.exists(path) || !Files.isDirectory(path)) {
-            // Throw an exception if the pcap directory does not exist
-            throw new IllegalArgumentException("The pcap directory " + pcapDir + " does not exist.");
+            // Check if the pcap directory exists
+            if (!Files.exists(path) || !Files.isDirectory(path)) {
+                // Throw an exception if the pcap directory does not exist
+                throw new IllegalArgumentException("The pcap directory " + pcapDir + " does not exist.");
+            }
+
+            // Create absolute full path
+            this.pcapFullPath = path.toAbsolutePath().toString() + "/"
+                    + pcapFullPath.substring(pcapFullPath.lastIndexOf("/") + 1);
         }
-
-        // Create absolute full path
-        this.pcapFullPath = path.toAbsolutePath().toString() + "/"
-                + pcapFullPath.substring(pcapFullPath.lastIndexOf("/") + 1);
     }
 
     /**
@@ -689,13 +700,13 @@ public class Pcap extends ClassificationGenerator {
 
         // // Test docker container
         // try {
-        //     dockerMain("fersuy/contackgen-ubuntu2204:1.1.0", 10, "/tmp/capture.pcap");
+        // dockerMain("fersuy/contackgen-ubuntu2204:1.1.0", 10, "/tmp/capture.pcap");
         // } catch (InterruptedException e) {
-        //     // TODO Auto-generated catch block
-        //     e.printStackTrace();
+        // // TODO Auto-generated catch block
+        // e.printStackTrace();
         // } catch (IOException e) {
-        //     // TODO Auto-generated catch block
-        //     e.printStackTrace();
+        // // TODO Auto-generated catch block
+        // e.printStackTrace();
         // }
     }
 
@@ -722,6 +733,7 @@ public class Pcap extends ClassificationGenerator {
                 // Read packet
                 Packet packet = handle.getNextPacketEx();
                 String packetString = packet.toString();
+                System.out.println(packetString);
                 parsePacket(packetString);
 
                 // Set the packet timestamp
@@ -736,6 +748,7 @@ public class Pcap extends ClassificationGenerator {
                 break;
             }
         }
+        System.out.println(srcIps.toString());
 
         handle.close();
     }
@@ -874,15 +887,10 @@ public class Pcap extends ClassificationGenerator {
         // Get the Docker client
         System.out.println("Get Docker client");
 
-        // Get Computer OS
-        String os = System.getProperty("os.name").toLowerCase();
-        System.out.println("OS: " + os);
-
         DockerClient dockerClient = null;
         if (os.equals("linux")) {
             dockerClient = DockerClientBuilder.getInstance().build();
         } else if (os.contains("windows")) {
-
             DockerClientConfig config = DefaultDockerClientConfig.createDefaultConfigBuilder()
                     .withDockerHost("tcp://localhost:2375")
                     .build();
@@ -1036,10 +1044,10 @@ public class Pcap extends ClassificationGenerator {
         System.out.println("Copy file from container");
         // Copy file from container
         // try (TarArchiveInputStream tarStream = new TarArchiveInputStream(
-        //         dockerClient.copyArchiveFromContainerCmd(containerName,
-        //                 containerFile).exec())) {
-        //     unTar(tarStream, new File(localPath));
-        // } 
+        // dockerClient.copyArchiveFromContainerCmd(containerName,
+        // containerFile).exec())) {
+        // unTar(tarStream, new File(localPath));
+        // }
         TarArchiveInputStream tarStream = null;
         try {
             tarStream = new TarArchiveInputStream(
@@ -1086,15 +1094,15 @@ public class Pcap extends ClassificationGenerator {
         System.out.println("Execute " + command + " in the container");
         dockerClient
                 .execStartCmd(dockerClient.execCreateCmd(containerName).withAttachStdout(true)
-                .withCmd("bash", "-c", command).exec().getId())
+                        .withCmd("bash", "-c", command).exec().getId())
                 .exec(new ExecStartResultCallback(System.out, System.err));
         // try {
-        //     dockerClient
-        //             .execStartCmd(dockerClient.execCreateCmd(containerName).withAttachStdout(true)
-        //                     .withCmd("bash", "-c", command).exec().getId())
-        //             .exec(new ResultCallback.Adapter<>());
+        // dockerClient
+        // .execStartCmd(dockerClient.execCreateCmd(containerName).withAttachStdout(true)
+        // .withCmd("bash", "-c", command).exec().getId())
+        // .exec(new ResultCallback.Adapter<>());
         // } catch (NotFoundException e) {
-        //     e.printStackTrace();
+        // e.printStackTrace();
         // }
     }
 
@@ -1109,9 +1117,9 @@ public class Pcap extends ClassificationGenerator {
         // Create container
         System.out.println("Create Docker container");
         // try (CreateContainerCmd createContainer = dockerClient
-        //         .createContainerCmd(dockerImage).withName(containerName)) {
-        //     createContainer.withTty(true);
-        //     createContainer.exec();
+        // .createContainerCmd(dockerImage).withName(containerName)) {
+        // createContainer.withTty(true);
+        // createContainer.exec();
         // }
         CreateContainerCmd createContainer = null;
         try {
