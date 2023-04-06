@@ -519,6 +519,11 @@ public class Pcap extends ClassificationGenerator {
         // Start the docker container
         dockerMain(getDockerImage(), getDuration(), getPcapFullPath());
 
+        // Controle maxPackets < len(srcIPs)
+        if (getMaxPackets() > srcIps.length) {
+            setMaxPackets(srcIps.length);
+        }
+
         Instances result = new Instances(m_DatasetFormat, 0);
         for (int i = 0; i < getMaxPackets(); i++) {
             // Equivalent to the generateExample method
