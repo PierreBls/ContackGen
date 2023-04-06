@@ -32,14 +32,16 @@ import org.pcap4j.core.Pcaps;
 import org.pcap4j.packet.Packet;
 
 import com.github.dockerjava.api.DockerClient;
+import com.github.dockerjava.api.async.ResultCallback;
 import com.github.dockerjava.api.command.CreateContainerCmd;
 import com.github.dockerjava.api.command.PullImageResultCallback;
 import com.github.dockerjava.api.exception.NotFoundException;
 import com.github.dockerjava.api.model.Container;
 import com.github.dockerjava.api.model.ContainerNetwork;
 import com.github.dockerjava.api.model.Image;
+import com.github.dockerjava.core.DefaultDockerClientConfig;
 import com.github.dockerjava.core.DockerClientBuilder;
-import com.github.dockerjava.api.async.ResultCallback;
+import com.github.dockerjava.core.DockerClientConfig;
 
 import weka.core.Attribute;
 import weka.core.DenseInstance;
@@ -65,7 +67,8 @@ import weka.datagenerators.ClassificationGenerator;
  * - fersuy/contackgen-ubuntu2204:1.1.0
  * 
  * @author Mathieu Salliot (SanjiKush on GitHub, mathieu.salliot@yahoo.fr).
- * @author Pierre BLAIS (pierreblais or PierreBls on GitHub, pierreblais@hotmail.fr).
+ * @author Pierre BLAIS (pierreblais or PierreBls on GitHub,
+ *         pierreblais@hotmail.fr).
  * 
  * @version idk.
  */
@@ -78,8 +81,9 @@ public class Pcap extends ClassificationGenerator {
     private static final String[] DATASET_ATTRIBUTES_NUMERICS = {
             "protocol", "version", "IHL", "length", "identification", "fragmentOffset", "TTL", "timer"
     };
-    // private static final String[] DATASET_ATTRIBUTES_TIMESTAMP = { // Useless while there is only one timestamp
-    //         "timeStamp"
+    // private static final String[] DATASET_ATTRIBUTES_TIMESTAMP = { // Useless
+    // while there is only one timestamp
+    // "timeStamp"
     // };
     // Dataset attributes
     private static Map<String, Attribute> datasetAttributes = new HashMap<String, Attribute>();
@@ -542,7 +546,8 @@ public class Pcap extends ClassificationGenerator {
                         // Add the string value
                         int addRes = attObj.addStringValue(attsValue);
                         if (addRes == -1) {
-                            throw new Exception("Error adding string value '" + attsValue + "' to attribute '" + attKey + "' (wrong type).");
+                            throw new Exception("Error adding string value '" + attsValue + "' to attribute '" + attKey
+                                    + "' (wrong type).");
                         }
                     }
                     instance.setValue(attObj, attsValue);
@@ -554,10 +559,9 @@ public class Pcap extends ClassificationGenerator {
                     double dd = attObj.parseDate(attsValue);
 
                     instance.setValue(attObj, dd);
-                    
+
                     continue;
-                }
-                else {
+                } else {
                     throw new Exception("Error setting attribute '" + attKey + "' (wrong type).");
                 }
             }
@@ -571,7 +575,7 @@ public class Pcap extends ClassificationGenerator {
     /**
      * Sets the value of an attribute.
      * 
-     * @param i the index of the attribute.
+     * @param i      the index of the attribute.
      * @param attKey the name of the attribute.
      * @return the value of the attribute.
      */
@@ -610,7 +614,7 @@ public class Pcap extends ClassificationGenerator {
     /**
      * Sets the value of an attribute.
      * 
-     * @param i the index of the attribute.
+     * @param i      the index of the attribute.
      * @param attKey the name of the attribute.
      * @return the value of the attribute.
      */
@@ -719,7 +723,7 @@ public class Pcap extends ClassificationGenerator {
                 timeStamps = ArrayUtils.add(timeStamps, handle.getTimestamp());
                 // Update the timer
                 long timeDiffInMillis = handle.getTimestamp().getTime() - startTime.getTime();
-                timer = ArrayUtils.add(timer, (int)timeDiffInMillis);
+                timer = ArrayUtils.add(timer, (int) timeDiffInMillis);
 
             } catch (TimeoutException e) {
             } catch (EOFException e) {
@@ -864,7 +868,21 @@ public class Pcap extends ClassificationGenerator {
 
         // Get the Docker client
         System.out.println("Get Docker client");
-        DockerClient dockerClient = DockerClientBuilder.getInstance().build();
+
+        // Get Computer OS
+        String os = System.getProperty("os.name").toLowerCase();
+        System.out.println("OS: " + os);
+
+        DockerClient dockerClient = null;
+        if (os.equals("linux")) {
+            dockerClient = DockerClientBuilder.getInstance().build();
+        } else if (os.contains("windows")) {
+
+            DockerClientConfig config = DefaultDockerClientConfig.createDefaultConfigBuilder()
+                    .withDockerHost("tcp://localhost:2375")
+                    .build();
+            dockerClient = DockerClientBuilder.getInstance(config).build();
+        }
 
         // Check if the container is already running
         if (dockerContainerExists(containerName, dockerClient)) {
@@ -881,7 +899,6 @@ public class Pcap extends ClassificationGenerator {
 
         // Run the container
         dockerRun(dockerImage, containerName, dockerClient);
-
 
         // Sleep 2 seconds
         Thread.sleep(2000);
@@ -920,7 +937,7 @@ public class Pcap extends ClassificationGenerator {
     /**
      * Pull a docker image.
      * 
-     * @param dockerImage the docker image to pull
+     * @param dockerImage  the docker image to pull
      * @param dockerClient the Docker client
      * @throws InterruptedException
      */
@@ -933,11 +950,10 @@ public class Pcap extends ClassificationGenerator {
         }
     }
 
-
     /**
      * Check if a given Docker image exists localy.
      * 
-     * @param dockerImage the docker image to run
+     * @param dockerImage  the docker image to run
      * @param dockerClient the Docker client
      */
     private static boolean dockerImageExists(String dockerImage, DockerClient dockerClient) {
@@ -957,7 +973,7 @@ public class Pcap extends ClassificationGenerator {
      * Check if a container exists.
      * 
      * @param containerName the name of the container
-     * @param dockerClient the Docker client
+     * @param dockerClient  the Docker client
      * @return true if the container exists, false otherwise
      */
     private static boolean dockerContainerExists(String containerName, DockerClient dockerClient) {
@@ -975,7 +991,7 @@ public class Pcap extends ClassificationGenerator {
      * Remove the given docker image.
      * 
      * @param containerName the name of the container
-     * @param dockerClient the Docker client
+     * @param dockerClient  the Docker client
      */
     private static void DockerRm(String containerName, DockerClient dockerClient) {
         // Remove container
@@ -987,7 +1003,7 @@ public class Pcap extends ClassificationGenerator {
      * Stop the given container.
      * 
      * @param containerName the name of the container
-     * @param dockerClient the Docker client
+     * @param dockerClient  the Docker client
      */
     private static void dockerStop(String containerName, DockerClient dockerClient) {
         // Stop container
@@ -998,10 +1014,10 @@ public class Pcap extends ClassificationGenerator {
     /**
      * Copy file from container
      * 
-     * @param pcapFullPath the path of the pcap file
+     * @param pcapFullPath  the path of the pcap file
      * @param containerName the name of the container
      * @param containerFile the path of the pcap file in the container
-     * @param dockerClient the Docker client
+     * @param dockerClient  the Docker client
      * @throws IOException
      */
     private static void dockerCp(String localPath, String containerName, String containerFile,
@@ -1035,17 +1051,17 @@ public class Pcap extends ClassificationGenerator {
     /**
      * Exec a command in the container.
      * 
-     * @param command the command to execute
+     * @param command       the command to execute
      * @param containerName the name of the container
-     * @param dockerClient the Docker client
+     * @param dockerClient  the Docker client
      */
     private static void dockerExec(String command, String containerName, DockerClient dockerClient) {
         // Execute the payload.sh in the container
         System.out.println("Execute " + command + " in the container");
         // dockerClient
-        //         .execStartCmd(dockerClient.execCreateCmd(containerName).withAttachStdout(true)
-        //         .withCmd("bash", "-c", command).exec().getId())
-        //         .exec(new ExecStartResultCallback(System.out, System.err));
+        // .execStartCmd(dockerClient.execCreateCmd(containerName).withAttachStdout(true)
+        // .withCmd("bash", "-c", command).exec().getId())
+        // .exec(new ExecStartResultCallback(System.out, System.err));
         try {
             dockerClient
                     .execStartCmd(dockerClient.execCreateCmd(containerName).withAttachStdout(true)
@@ -1059,9 +1075,9 @@ public class Pcap extends ClassificationGenerator {
     /**
      * Run a docker container.
      * 
-     * @param dockerImage the docker image to run
+     * @param dockerImage   the docker image to run
      * @param containerName the name of the container
-     * @param dockerClient the Docker client
+     * @param dockerClient  the Docker client
      */
     private static void dockerRun(String dockerImage, String containerName, DockerClient dockerClient) {
         // Create container
