@@ -135,12 +135,16 @@ public class Pcap extends ClassificationGenerator {
     // TimeStamp
     private static Timestamp startTime;
 
+    // OS
+    private static String os;
+
     /**
      * Initialize the generator with the default values.
      */
     public Pcap() {
         super();
 
+        setOs();
         setDockerImage(defaultDockerImage());
         setDuration(defaultDuration());
         setPcapFullPath(defaultPcapFullPath());
@@ -300,6 +304,9 @@ public class Pcap extends ClassificationGenerator {
      * @return the default pcap directory.
      */
     protected String defaultPcapFullPath() {
+        if (os.contains("windows")) {
+            return "capture.pcap";
+        }
         return "/tmp/capture.pcap";
     }
 
@@ -366,6 +373,10 @@ public class Pcap extends ClassificationGenerator {
         return timestampFormat;
     }
 
+    private static void setOs() {
+        os = System.getProperty("os.name").toLowerCase();
+    }
+
     /**
      * Sets the Docker image.
      * 
@@ -398,22 +409,24 @@ public class Pcap extends ClassificationGenerator {
         if (pcapFullPath.length() != 0) {
             this.pcapFullPath = defaultPcapFullPath();
         }
+        if (os.equals("linux")) {
 
-        // Extract the pcap directory
-        String pcapDir = pcapFullPath.substring(0, pcapFullPath.lastIndexOf("/"));
+            // Extract the pcap directory
+            String pcapDir = pcapFullPath.substring(0, pcapFullPath.lastIndexOf("/"));
 
-        // Convert the pcap directory to a Path object
-        Path path = Paths.get(pcapDir);
+            // Convert the pcap directory to a Path object
+            Path path = Paths.get(pcapDir);
 
-        // Check if the pcap directory exists
-        if (!Files.exists(path) || !Files.isDirectory(path)) {
-            // Throw an exception if the pcap directory does not exist
-            throw new IllegalArgumentException("The pcap directory " + pcapDir + " does not exist.");
+            // Check if the pcap directory exists
+            if (!Files.exists(path) || !Files.isDirectory(path)) {
+                // Throw an exception if the pcap directory does not exist
+                throw new IllegalArgumentException("The pcap directory " + pcapDir + " does not exist.");
+            }
+
+            // Create absolute full path
+            this.pcapFullPath = path.toAbsolutePath().toString() + "/"
+                    + pcapFullPath.substring(pcapFullPath.lastIndexOf("/") + 1);
         }
-
-        // Create absolute full path
-        this.pcapFullPath = path.toAbsolutePath().toString() + "/"
-                + pcapFullPath.substring(pcapFullPath.lastIndexOf("/") + 1);
     }
 
     /**
@@ -868,10 +881,6 @@ public class Pcap extends ClassificationGenerator {
 
         // Get the Docker client
         System.out.println("Get Docker client");
-
-        // Get Computer OS
-        String os = System.getProperty("os.name").toLowerCase();
-        System.out.println("OS: " + os);
 
         DockerClient dockerClient = null;
         if (os.equals("linux")) {
