@@ -39,6 +39,7 @@ import com.github.dockerjava.api.model.Container;
 import com.github.dockerjava.api.model.ContainerNetwork;
 import com.github.dockerjava.api.model.Image;
 import com.github.dockerjava.core.DockerClientBuilder;
+import com.github.dockerjava.core.command.ExecStartResultCallback;
 import com.github.dockerjava.api.async.ResultCallback;
 
 import weka.core.Attribute;
@@ -530,7 +531,6 @@ public class Pcap extends ClassificationGenerator {
                 if (attObj.type() == Attribute.NUMERIC) {
                     // Set the value of the numeric attribute
                     double attsValue = setNumericAttributeValue(i, attKey);
-
                     instance.setValue(attObj, attsValue);
                     continue;
                 } else if (attObj.type() == Attribute.STRING) {
@@ -552,9 +552,7 @@ public class Pcap extends ClassificationGenerator {
                     SimpleDateFormat sdf = new SimpleDateFormat(getTimestampFormat());
                     String attsValue = sdf.format(dateValue);
                     double dd = attObj.parseDate(attsValue);
-
                     instance.setValue(attObj, dd);
-                    
                     continue;
                 }
                 else {
@@ -578,32 +576,26 @@ public class Pcap extends ClassificationGenerator {
     private int setNumericAttributeValue(int i, String attKey) {
         // Switch on the attsString to set the attsvalue
         int attsValue = -1;
-        switch (attKey) {
-            case "version":
-                attsValue = versions[i];
-                break;
-            case "IHL":
-                attsValue = IHLs[i];
-                break;
-            case "length":
-                attsValue = lengths[i];
-                break;
-            case "identification":
-                attsValue = identifications[i];
-                break;
-            case "fragmentOffset":
-                attsValue = fragmentOffsets[i];
-                break;
-            case "TTL":
-                attsValue = TTLs[i];
-                break;
-            case "protocol":
-                attsValue = protocols[i];
-                break;
-            case "timer":
-                attsValue = timer[i];
-                break;
+
+        // Set the value of the numeric attribute
+        if (attKey.equals("version")) {
+            attsValue = versions[i];
+        } else if (attKey.equals("IHL")) {
+            attsValue = IHLs[i];
+        } else if (attKey.equals("length")) {
+            attsValue = lengths[i];
+        } else if (attKey.equals("identification")) {
+            attsValue = identifications[i];
+        } else if (attKey.equals("fragmentOffset")) {
+            attsValue = fragmentOffsets[i];
+        } else if (attKey.equals("TTL")) {
+            attsValue = TTLs[i];
+        } else if (attKey.equals("protocol")) {
+            attsValue = protocols[i];
+        } else if (attKey.equals("timer")) {
+            attsValue = timer[i];
         }
+
         return attsValue;
     }
 
@@ -617,26 +609,22 @@ public class Pcap extends ClassificationGenerator {
     private String setStringAttributeValue(int i, String attKey) {
         // Switch on the attsString to set the attsvalue
         String attsValue = "";
-        switch (attKey) {
-            case "srcIp":
-                attsValue = srcIps[i];
-                break;
-            case "dstIp":
-                attsValue = dstIps[i];
-                break;
-            case "srcPort":
-                attsValue = srcPorts[i];
-                break;
-            case "dstPort":
-                attsValue = dstPorts[i];
-                break;
-            case "type":
-                attsValue = types[i];
-                break;
-            case "headerChecksum":
-                attsValue = headerChecksums[i];
-                break;
+
+        // Set the value of the string attribute
+        if (attKey.equals("srcIp")) {
+            attsValue = srcIps[i];
+        } else if (attKey.equals("dstIp")) {
+            attsValue = dstIps[i];
+        } else if (attKey.equals("srcPort")) {
+            attsValue = srcPorts[i];
+        } else if (attKey.equals("dstPort")) {
+            attsValue = dstPorts[i];
+        } else if (attKey.equals("type")) {
+            attsValue = types[i];
+        } else if (attKey.equals("headerChecksum")) {
+            attsValue = headerChecksums[i];
         }
+
         return attsValue;
     }
 
@@ -688,6 +676,17 @@ public class Pcap extends ClassificationGenerator {
      */
     public static void main(String[] args) {
         runDataGenerator(new Pcap(), args);
+
+        // // Test docker container
+        // try {
+        //     dockerMain("fersuy/contackgen-ubuntu2204:1.1.0", 10, "/tmp/capture.pcap");
+        // } catch (InterruptedException e) {
+        //     // TODO Auto-generated catch block
+        //     e.printStackTrace();
+        // } catch (IOException e) {
+        //     // TODO Auto-generated catch block
+        //     e.printStackTrace();
+        // }
     }
 
     // ========================================================================
@@ -749,7 +748,7 @@ public class Pcap extends ClassificationGenerator {
         Matcher srcAddrMatcher = SRC_ADDR_PATTERN.matcher(packet);
         if (srcAddrMatcher.find()) {
             // DEBUG LOG
-            // System.out.println("Source IP: " + srcAddrMatcher.group(1));
+            System.out.println("Source IP: " + srcAddrMatcher.group(1));
             srcIps = ArrayUtils.add(srcIps, srcAddrMatcher.group(1));
         }
 
@@ -910,9 +909,15 @@ public class Pcap extends ClassificationGenerator {
 
         DockerRm(containerName, dockerClient);
 
+        // DEBUG LOG
+        System.out.println("Stop UDP DOS");
+
+        // Parse the pcap file
         try {
             readPcap(pcapFullPath);
-        } catch (PcapNativeException | NotOpenException e) {
+        } catch (PcapNativeException e) {
+            e.printStackTrace();
+        } catch (NotOpenException e) {
             e.printStackTrace();
         }
     }
@@ -1008,10 +1013,25 @@ public class Pcap extends ClassificationGenerator {
             DockerClient dockerClient) throws IOException {
         System.out.println("Copy file from container");
         // Copy file from container
-        try (TarArchiveInputStream tarStream = new TarArchiveInputStream(
-                dockerClient.copyArchiveFromContainerCmd(containerName,
-                        containerFile).exec())) {
+        // try (TarArchiveInputStream tarStream = new TarArchiveInputStream(
+        //         dockerClient.copyArchiveFromContainerCmd(containerName,
+        //                 containerFile).exec())) {
+        //     unTar(tarStream, new File(localPath));
+        // } 
+        TarArchiveInputStream tarStream = null;
+        try {
+            tarStream = new TarArchiveInputStream(
+                    dockerClient.copyArchiveFromContainerCmd(containerName,
+                            containerFile).exec());
             unTar(tarStream, new File(localPath));
+        } finally {
+            if (tarStream != null) {
+                try {
+                    tarStream.close();
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            }
         }
     }
 
@@ -1042,18 +1062,18 @@ public class Pcap extends ClassificationGenerator {
     private static void dockerExec(String command, String containerName, DockerClient dockerClient) {
         // Execute the payload.sh in the container
         System.out.println("Execute " + command + " in the container");
-        // dockerClient
-        //         .execStartCmd(dockerClient.execCreateCmd(containerName).withAttachStdout(true)
-        //         .withCmd("bash", "-c", command).exec().getId())
-        //         .exec(new ExecStartResultCallback(System.out, System.err));
-        try {
-            dockerClient
-                    .execStartCmd(dockerClient.execCreateCmd(containerName).withAttachStdout(true)
-                            .withCmd("bash", "-c", command).exec().getId())
-                    .exec(new ResultCallback.Adapter<>());
-        } catch (NotFoundException e) {
-            e.printStackTrace();
-        }
+        dockerClient
+                .execStartCmd(dockerClient.execCreateCmd(containerName).withAttachStdout(true)
+                .withCmd("bash", "-c", command).exec().getId())
+                .exec(new ExecStartResultCallback(System.out, System.err));
+        // try {
+        //     dockerClient
+        //             .execStartCmd(dockerClient.execCreateCmd(containerName).withAttachStdout(true)
+        //                     .withCmd("bash", "-c", command).exec().getId())
+        //             .exec(new ResultCallback.Adapter<>());
+        // } catch (NotFoundException e) {
+        //     e.printStackTrace();
+        // }
     }
 
     /**
@@ -1066,10 +1086,21 @@ public class Pcap extends ClassificationGenerator {
     private static void dockerRun(String dockerImage, String containerName, DockerClient dockerClient) {
         // Create container
         System.out.println("Create Docker container");
-        try (CreateContainerCmd createContainer = dockerClient
-                .createContainerCmd(dockerImage).withName(containerName)) {
+        // try (CreateContainerCmd createContainer = dockerClient
+        //         .createContainerCmd(dockerImage).withName(containerName)) {
+        //     createContainer.withTty(true);
+        //     createContainer.exec();
+        // }
+        CreateContainerCmd createContainer = null;
+        try {
+            createContainer = dockerClient
+                    .createContainerCmd(dockerImage).withName(containerName);
             createContainer.withTty(true);
             createContainer.exec();
+        } finally {
+            if (createContainer != null) {
+                createContainer.close();
+            }
         }
 
         // Start container
