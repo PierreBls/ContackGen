@@ -52,4 +52,4 @@ Run le main de la classe weka.gui.GUIChooser
 - Mathieu SALLIOT
 - Pierre BLAIS
 - Luis RIBEIRO
-- Benjamin ALONZO
+- Benjamin ALONZEAU
